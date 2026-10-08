@@ -30,6 +30,7 @@ flowchart TD
     I --> L[FastAPI Backend /api/summary, /api/events]
     L --> M[Streamlit Dashboard Charts + Metrics + Table]
     K --> M
+
 Detailed Architecture & Flowchart Explanation
 The system architecture is structured into four core layers to ensure real-time performance and complete decoupling between computer vision processing and the web frontend:   
 PDF
