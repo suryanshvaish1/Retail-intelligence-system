@@ -30,111 +30,52 @@ flowchart TD
     I --> L[FastAPI Backend /api/summary, /api/events]
     L --> M[Streamlit Dashboard Charts + Metrics + Table]
     K --> M
+
+Detailed Architecture & Flowchart Explanation
+
+The system architecture is structured into four core layers to ensure real-time performance and complete decoupling between computer vision processing and the web frontend:
 1. Ingestion & Perception Layer (Video to Object Tracking)
-Video File / Webcam Ingestion
+Video File / Webcam Ingestion: Captures each individual video frame sequentially from an MP4 file or real-time IP camera/webcam stream using OpenCV VideoCapture routines.
 
-Reads incoming video frames sequentially using OpenCV VideoCapture routines.
+YOLOv8 Person Detection: Every frame passes through the YOLOv8 neural network, filtering specifically for class 0 (person) to isolate humans and output spatial bounding box coordinates along with detection confidence percentages.
 
-Explanation: Captures each individual video frame sequentially from an MP4 file or real-time IP camera/webcam stream using OpenCV's video ingestion tools.
-
-YOLOv8 Person Detection
-
-Each frame is passed into a lightweight YOLOv8 model trained to isolate class 0 (person). It outputs bounding box coordinates (x 
-1
-​
- ,y 
-1
-​
- ,x 
-2
-​
- ,y 
-2
-​
- ) and detection confidence scores.
-
-Explanation: Every frame passes through the YOLOv8 neural network, filtering specifically for class 0 (person). It detects humans and outputs spatial bounding box coordinates along with detection confidence percentages.
-
-DeepSORT Multi-Object Tracking
-
-Bounding boxes are fed into DeepSORT, which uses Kalman filtering and deep cosine metric learning to assign and preserve a unique track_id across consecutive frames, even during temporary visual occlusions.
-
-Explanation: Takes YOLO's detected bounding boxes and passes them to DeepSORT. DeepSORT uses Kalman filtering (to predict where a person will move next) and deep appearance features to keep assigning the exact same track_id to a person even if they momentarily step behind an object or another shopper.
+DeepSORT Multi-Object Tracking: Takes YOLO's detected bounding boxes and passes them to DeepSORT, which uses Kalman filtering and deep appearance features to preserve a unique track_id across consecutive frames, even during temporary visual occlusions
 
 2. Feature Extraction & Analytics Processing Layer
-Spatial ROI & Zone Verification
-
-Checks whether the centroid coordinates (c 
-x
-​
- ,c 
-y
-​
- ) of each track_id reside within defined bounding polygons (e.g., Main Display Shelf Zone or Checkout Counter).
-
-Explanation: Calculates the center point (c 
-x
-​
- ,c 
-y
-​
- ) of a tracked person's bounding box and tests whether it falls inside user-defined regions of interest (like the shelf area or register line).
-
-Dwell Time Computation
-
-Accumulates frame-level dwell counts for active track_ids within each zone and converts frame numbers into duration in seconds using video FPS.
-
-Explanation: Measures how long a person remains inside a specific zone by incrementing frame counters and dividing by the video's frames-per-second (FPS) rate to calculate exact dwell time in seconds.
-
-Demographic Classification
-
-Crops person bounding boxes to pass through a lightweight demographic classifier (logging estimated age brackets and gender metrics).
-
-Explanation: Crops out the person's bounding box region and runs it through a classifier model to estimate age group and gender for demographic telemetry.
-
-Database Logging
-
-Once a visitor's dwell threshold is reached, event details (track_id, gender, age_group, zone, dwell_seconds, timestamp) are persisted to retail_data.db via SQLAlchemy ORM.
-
-Explanation: When a tracked individual spends enough time in a zone to meet the threshold, their complete session record is written into the SQLite database (retail_data.db) using SQLAlchemy.
-
+Spatial ROI & Zone Verification: Calculates the center point $(c_x, c_y)$ of a tracked person's bounding box and tests whether it falls inside user-defined regions of interest (like the shelf area or register line).
+Dwell Time Computation: Measures how long a person remains inside a specific zone by incrementing frame counters and dividing by the video's frames-per-second (FPS) rate to calculate exact dwell time in seconds.
+Demographic Classification: Crops out the person's bounding box region and runs it through a classifier model to estimate age group and gender for demographic telemetry.
+Database Logging: Once a tracked individual spends enough time in a zone to meet the threshold, their complete session record (track_id, gender, age_group, zone, dwell_seconds, timestamp) is persisted to retail_data.db via SQLAlchemy ORM.
 3. Spatial Density & Heatmapping Layer
-Coordinate Accumulation
+Coordinate Accumulation: Tracks the bottom-center coordinates of each person's feet and plots those coordinates onto a 2D NumPy numerical grid to map spatial foot traffic across the floor layout.
 
-Parallel to event logging, bottom-center foot coordinates (c 
-x
-​
- ,c 
-y
-​
- ) of all tracked individuals are continuously plotted onto a 2D float NumPy matrix representing the store floor layout.
-
-Explanation: Tracks the bottom-center coordinates of each person's feet and plots those coordinates onto a 2D NumPy numerical grid to map spatial foot traffic across the floor layout.
-
-Gaussian Smoothing & JET Colormap
-
-Applies a 31×31 Gaussian kernel blur to transform point clusters into smooth density gradients, normalized into an 8-bit image and colormapped using OpenCV's COLORMAP_JET before saving as heatmap_output.png.
-
-Explanation: Blurs the raw coordinate points with a Gaussian kernel to turn individual steps into smooth heat gradients, normalizes the intensities, applies a red-to-blue color scale (COLORMAP_JET), and saves the image as heatmap_output.png.
-
+Gaussian Smoothing & JET Colormap: Blurs raw coordinate points with a Gaussian kernel to turn individual steps into smooth heat gradients, normalizes intensities, applies a red-to-blue color scale (COLORMAP_JET), and saves the image as heatmap_output.png.
 4. Serving & Visual Presentation Layer
-FastAPI Backend (api.py)
+FastAPI Backend (api.py): Hosts an asynchronous web server using FastAPI that serves database metrics over REST API endpoints (/api/summary, /api/events, /api/copilot), allowing the dashboard to read data without slowing down the video detection loop.
+AI Retail Copilot (ai_copilot.py): Runs rule-based analytical checks on recorded store data to generate live operational alerts (e.g., flagging long checkout wait times or underperforming shelves).   Streamlit Dashboard (dashboard.py): Connects to the FastAPI backend to render an interactive web interface displaying high-level store stats, visual graphs, raw event tables, and the saved movement heatmap image.
 
-Asynchronously exposes structured REST endpoints (/api/summary, /api/events, /api/copilot) to query database records without blocking computer vision processing loops.
+Dashboard Results & Visualizations
+1. Store Analytics Overview & AI Retail CopilotDisplays real-time KPIs, zone statistics, and automated operational recommendations.
+2. Spatial Foot-Traffic Heatmap ResultVisualizes customer movement density and high-traffic friction areas within the store layout.
+3. Demographic & Dwell AnalysisProvides breakdown charts for visitor gender distributions and individual dwell times per tracking ID.
+4. Raw Event Logs & ExportAllows real-time inspection of database records and direct CSV report downloads.
 
-Explanation: Hosts an asynchronous web server using FastAPI that serves database metrics over REST API endpoints, allowing the dashboard to read data without slowing down the video detection loop.
+Key Features:
+1-Real-Time Person Detection & Tracking: Leverages YOLOv8 and DeepSORT for identity preservation across video frames.
+2-Zone & Dwell Time Analytics: Automatically detects when shoppers enter defined Regions of Interest (ROI) and logs browsing duration.
+3-Spatial Movement Heatmapping: Accumulates visitor coordinates to render color-mapped density images (heatmap_output.png).
+4-Decoupled Backend API: FastAPI exposes /api/summary, /api/events, and /api/copilot endpoints asynchronously.
+5-Interactive Executive Dashboard: Built using Streamlit and Plotly Express to visualize store KPIs and event telemetry.   AI Retail Copilot: Evaluates floor traffic patterns in real time to generate actionable floor management advice.
 
-AI Retail Copilot (ai_copilot.py)
+Tech Stack:
+Computer Vision & Tracking: OpenCV, Ultralytics YOLOv8, DeepSORT
+Backend & Storage: FastAPI, Uvicorn, SQLAlchemy, SQLite
+Frontend & Visualization: Streamlit, Plotly Express
+Analytics & Reporting: Pandas, NumPy, ReportLab
 
-An automated heuristic engine evaluates floor metrics to produce dynamic operational suggestions (e.g., shelf display optimization or auxiliary queue alerts).
+Project Structure:
 
-Explanation: Runs rule-based analytical checks on recorded store data to generate live operational alerts (e.g., flagging long checkout wait times or underperforming shelves).
-
-Streamlit Dashboard (dashboard.py)
-
-Feeds from the REST API to render real-time KPI cards, interactive Plotly charts (gender distribution pies and dwell time bar graphs), raw database logs, and the spatial movement heatmap.
-
-Explanation: Connects to the FastAPI backend to render an interactive web interface displaying high-level store stats, visual graphs, raw event tables, and the saved movement heatmap image.
+retail-intelligence-system/
 ├── docs/
 │   ├── flowchart.png           # Pipeline architecture diagram
 │   ├── dashboard_top.png       # Executive metrics screenshot
@@ -149,7 +90,11 @@ Explanation: Connects to the FastAPI backend to render an interactive web interf
 ├── store_video.mp4             # Input video stream
 ├── retail_data.db              # Generated SQLite event database
 └── heatmap_output.png          # Generated foot-traffic spatial heatmap
-Quick Start Guide1. Environment SetupClone the repository and set up a Python virtual environment:Bashgit clone [https://github.com/suryanshvaish1/retail-intelligence-system.git](https://github.com/suryanshvaish1/retail-intelligence-system.git)
+
+Quick Start Guide
+1. Environment Setup
+Clone the repository and set up a Python virtual environment:
+git clone [https://github.com/suryanshvaish1/retail-intelligence-system.git](https://github.com/suryanshvaish1/retail-intelligence-system.git)
 cd retail-intelligence-system
 
 # Create and activate virtual environment
@@ -164,3 +109,4 @@ Terminal 2: Start FastAPI Backend ServiceLaunches the REST API exposing analytic
 Terminal 3: Launch Streamlit DashboardStarts the interactive analytics dashboard at http://localhost:8501:Bashstreamlit run dashboard.py
 3. Generate Executive PDF ReportTo compile an executive audit PDF summary from database records:Bashpython generate_report.py
 API ReferenceEndpointMethodDescription/GETHealth check status and endpoint manifest/docsGETInteractive OpenAPI / Swagger UI documentation/api/summaryGETAggregated store KPIs (total visitors, avg dwell, demographics)/api/eventsGETComplete list of recorded visitor events/api/copilotGETAI Copilot operational recommendations and queue alerts
+
