@@ -8,7 +8,7 @@ An end-to-end edge AI and computer vision platform that converts CCTV store foot
 
 ![System Architecture Flowchart](docs/flowchart.png)
 
-mermaid
+'''mermaid
 flowchart TD
     A[Video File / Webcam] --> B[Frame Reader - OpenCV]
     B --> C[Person Detection - YOLOv8 pretrained]
