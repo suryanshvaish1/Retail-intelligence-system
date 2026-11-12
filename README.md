@@ -892,6 +892,7 @@ Repository:
 https://github.com/suryanshvaish1/retail-intelligence-system
 
 ---
+drive link-https://1drv.ms/v/c/8db0741b659a15e5/IQBv2A0uQMopRphrxK-tGT2NAcsuJP_YEkLUymK3AzJpt6I?e=eYqY8s
 
 ## ⭐ If You Find This Project Useful
 
