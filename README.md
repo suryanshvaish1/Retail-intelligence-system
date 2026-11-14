@@ -2,7 +2,9 @@
 
 An end-to-end **Edge AI and Computer Vision platform** that converts CCTV/store footage into real-time, actionable retail intelligence.
 
-The system detects and tracks visitors, calculates zone-specific dwell times, analyzes demographics, generates 2D foot-traffic heatmaps, exposes analytics through REST APIs, and provides an interactive executive dashboard with automated AI-powered operational insights.
+The system detects and tracks visitors, calculates zone-specific dwell times, analyzes estimated demographics, generates 2D foot-traffic heatmaps, exposes analytics through REST APIs, and provides an interactive executive dashboard with automated operational insights.
+
+🎥 **[Watch Live System Demo](https://1drv.ms/v/c/8db0741b659a15e5/IQBv2A0uQMopRphrxK-tGT2NAcsuJP_YEkLUymK3AzJpt6I?e=eYqY8s)**
 
 ---
 
@@ -10,112 +12,97 @@ The system detects and tracks visitors, calculates zone-specific dwell times, an
 
 The **Autonomous Retail Intelligence System** combines computer vision, multi-object tracking, spatial analytics, backend APIs, and business intelligence into a single platform.
 
-It transforms raw CCTV footage into useful retail metrics such as:
+It transforms raw CCTV footage into useful retail metrics, including:
 
-* 👥 Visitor count and movement
-* 🎯 Person detection and tracking
-* 📍 Zone-specific visitor activity
-* ⏱️ Customer dwell time
-* 🧑‍🤝‍🧑 Estimated age-group and gender distribution
-* 🗺️ Foot-traffic heatmaps
-* 📊 Store performance analytics
-* 🤖 AI-generated operational recommendations
-* 📄 Executive PDF reports
+- 👥 Visitor count and movement
+- 🎯 Person detection and tracking
+- 📍 Zone-specific visitor activity
+- ⏱️ Customer dwell time
+- 🧑‍🤝‍🧑 Estimated age-group and gender distribution
+- 🗺️ Foot-traffic heatmaps
+- 📊 Store performance analytics
+- 🤖 Automated operational recommendations
+- 📄 Executive PDF reports
 
 ---
 
-# 🏗️ System Architecture
+## 🏗️ System Architecture
 
 ![System Architecture Flowchart](docs/flowchart.png)
 
 ```mermaid
 flowchart TD
-    A[Video File / Webcam] --> B[Frame Reader - OpenCV]
+    A[Video File / Webcam / IP Camera] --> B[Frame Reader - OpenCV]
     B --> C[Person Detection - YOLOv8]
     C --> D[Tracking - DeepSORT]
 
-    %% AI Pipeline
     D --> E[Crop Tracked Person]
     E --> F[Age & Gender Classification]
     E --> G[Zone / ROI Detection]
 
     F --> H[Analytics Processing]
     G --> H
-
     H --> I[(SQLite Database)]
 
-    %% Heatmap Pipeline
     D --> J[Track Position]
     J --> K[Heatmap Accumulation]
     K --> L[Heatmap Image]
 
-    %% Backend
     I --> M[FastAPI Backend]
     M --> N[REST API]
-
-    %% Dashboard
     N --> O[Streamlit Dashboard]
     L --> O
 
-    %% AI Copilot
     M --> P[AI Retail Copilot]
     P --> O
 ```
 
----
-
-# 🔍 Architecture & Pipeline
+## 🔍 Architecture & Processing Pipeline
 
 The system is organized into four major layers.
 
-## 1. 🎥 Ingestion & Perception Layer
+### 1. 🎥 Ingestion & Perception Layer
 
-### Video Ingestion
+#### Video Ingestion
 
-The system accepts either:
+The system supports:
 
-* Pre-recorded MP4 video
-* Webcam input
-* IP camera streams
+- Pre-recorded MP4 video
+- USB webcam
+- RTSP/IP camera streams
 
 Frames are captured sequentially using OpenCV's `VideoCapture`.
 
-### Person Detection — YOLOv8
+#### Person Detection — YOLOv8
 
-Each frame is processed using a pretrained **YOLOv8** object detection model.
+Each frame is processed using a pretrained YOLOv8 object-detection model.
 
 The pipeline:
 
 1. Processes the current video frame.
-2. Detects objects.
-3. Filters detections to the `person` class.
+2. Detects objects in the frame.
+3. Filters detections to the person class.
 4. Extracts bounding boxes and confidence scores.
 
-This isolates people from other objects in the scene.
+#### Multi-Object Tracking — DeepSORT
 
-### Multi-Object Tracking — DeepSORT
+Detected people are passed to DeepSORT.
 
-Detected people are passed to **DeepSORT**.
+DeepSORT assigns a unique `track_id` to each tracked person and attempts to maintain that identity across consecutive frames.
 
-DeepSORT assigns a unique `track_id` to every detected person and attempts to maintain that identity across consecutive frames.
+For example, the person detected in frame 500 can be associated with the same person in frame 501.
 
-This allows the system to determine:
+Tracking can also help maintain identity during temporary occlusion.
 
-> "This person detected in frame 500 is the same person detected in frame 501."
+### 2. 🧠 Feature Extraction & Analytics Layer
 
-Tracking continues even when a person is temporarily occluded.
+#### Spatial ROI / Zone Detection
 
----
+The system calculates a representative point for each tracked person's bounding box, such as its bottom-center point.
 
-# 2. 🧠 Feature Extraction & Analytics Layer
+This coordinate is checked against predefined Regions of Interest (ROIs).
 
-## Spatial ROI / Zone Detection
-
-The system calculates the center or bottom-center point of every tracked person's bounding box.
-
-This coordinate is checked against predefined **Regions of Interest (ROI)**.
-
-Example zones:
+Example store zones:
 
 ```text
 +---------------------------------------+
@@ -131,28 +118,23 @@ Example zones:
 +---------------------------------------+
 ```
 
-This allows the system to determine whether a visitor is currently inside a specific store zone.
+This allows the system to determine whether a visitor is currently inside a configured store zone.
 
----
-
-## ⏱️ Dwell Time Calculation
+#### ⏱️ Dwell-Time Calculation
 
 The system tracks how long each visitor remains inside a particular zone.
 
-The calculation is based on:
+A basic frame-based calculation is:
 
 ```text
 Dwell Time = Frames Spent in Zone / Video FPS
-```
 
-For example:
-
-```text
+Example:
 FPS = 30
 Frames in Zone = 300
 
 Dwell Time = 300 / 30
-           = 10 seconds
+            = 10 seconds
 ```
 
 When the configured threshold is reached, the visitor session can be persisted to the database.
@@ -162,66 +144,54 @@ Example event:
 ```text
 Track ID     : 42
 Zone         : Shelf Area
-Gender       : Male
-Age Group    : Adult
+Gender       : Male (estimated)
+Age Group    : Adult (estimated)
 Dwell Time   : 18.5 seconds
 Timestamp    : 2026-10-08 10:30:21
 ```
 
----
-
-## 🧑 Demographic Classification
+#### 🧑 Demographic Classification
 
 The system crops the tracked person's bounding box and passes it through a pretrained classification model.
 
 The model estimates:
 
-* Gender
-* Age group
+- Gender
+- Age group
 
-These values are stored as telemetry associated with the visitor's tracking session.
+These predictions are stored as telemetry associated with the visitor's tracking session.
 
-> **Note:** Demographic predictions are model estimates and should not be treated as verified personal attributes.
+**Note:** Demographic predictions are model estimates, not verified personal attributes. Their accuracy can vary with camera placement, lighting, occlusion, and model limitations.
 
----
-
-## 🗄️ Database Logging
+#### 🗄️ Database Logging
 
 Processed events are persisted using:
 
-* **SQLite**
-* **SQLAlchemy ORM**
+- SQLite
+- SQLAlchemy ORM
 
 Example event fields:
 
-| Field           | Description               |
-| --------------- | ------------------------- |
-| `track_id`      | Unique tracked visitor ID |
-| `gender`        | Estimated gender          |
-| `age_group`     | Estimated age group       |
-| `zone`          | Store zone                |
-| `dwell_seconds` | Time spent in zone        |
-| `timestamp`     | Event timestamp           |
+| Field | Description |
+|---|---|
+| `track_id` | Unique tracked visitor ID |
+| `gender` | Estimated gender classification |
+| `age_group` | Estimated age group |
+| `zone` | Store zone |
+| `dwell_seconds` | Time spent in the zone |
+| `timestamp` | Event timestamp |
 
-Database:
+Database file: `retail_data.db`
 
-```text
-retail_data.db
-```
-
----
-
-# 3. 🗺️ Spatial Density & Heatmap Layer
+### 3. 🗺️ Spatial Density & Heatmap Layer
 
 The system continuously records the movement coordinates of tracked visitors.
 
-For every tracked person, the pipeline captures the approximate **bottom-center point of the bounding box**, representing the visitor's floor position.
+For every tracked person, the pipeline captures an approximate bottom-center point of the bounding box, representing the visitor's floor position.
 
 These coordinates are accumulated into a 2D NumPy grid.
 
-### Heatmap Processing
-
-The raw movement data goes through the following pipeline:
+#### Heatmap Processing
 
 ```text
 Visitor Coordinates
@@ -237,36 +207,27 @@ OpenCV JET Colormap
 heatmap_output.png
 ```
 
-The resulting heatmap makes it easy to identify:
+The resulting heatmap helps identify:
 
-* High-traffic areas
-* Low-traffic areas
-* Product browsing zones
-* Potential customer bottlenecks
-* Checkout congestion
-* Underutilized store space
+- High-traffic areas
+- Low-traffic areas
+- Product-browsing zones
+- Potential customer bottlenecks
+- Checkout congestion
+- Underutilized store space
 
-Example output:
+Typical JET colormap interpretation:
 
 ```text
-Cold / Low Traffic
-        ↓
-      Blue
-        ↓
-     Green
-        ↓
-     Yellow
-        ↓
-Hot / High Traffic
-        ↓
-       Red
+Low traffic  → Blue
+              Green
+              Yellow
+High traffic → Red
 ```
 
----
+### 4. 🌐 Serving & Presentation Layer
 
-# 4. 🌐 Serving & Presentation Layer
-
-## FastAPI Backend
+#### FastAPI Backend
 
 The FastAPI service provides a decoupled REST interface for accessing analytics.
 
@@ -279,15 +240,13 @@ GET /api/events
 GET /api/copilot
 ```
 
-This separation ensures that the dashboard does not need to directly interact with the computer vision processing loop.
+This separation means the dashboard does not need to interact directly with the computer-vision processing loop.
 
----
+#### 🤖 AI Retail Copilot
 
-## 🤖 AI Retail Copilot
+The AI Retail Copilot analyzes recorded store data and generates operational recommendations.
 
-The AI Retail Copilot analyzes the recorded store data and generates operational recommendations.
-
-Example insights:
+Example:
 
 ```text
 ⚠ High checkout dwell time detected.
@@ -299,82 +258,61 @@ during peak traffic periods.
 
 Other possible insights include:
 
-* High visitor dwell time
-* Underperforming zones
-* High-traffic areas
-* Checkout congestion
-* Low customer engagement
-* Potential staffing requirements
+- High visitor dwell time
+- Underperforming zones
+- High-traffic areas
+- Checkout congestion
+- Low customer engagement
+- Potential staffing requirements
 
-The current implementation uses rule-based analytical logic to convert store telemetry into actionable recommendations.
+The current implementation uses **rule-based analytical logic** to convert store telemetry into actionable recommendations. It is not currently an LLM-based system.
 
----
-
-# 📊 Streamlit Executive Dashboard
+#### 📊 Streamlit Executive Dashboard
 
 The Streamlit dashboard provides an interactive interface for viewing store analytics.
 
 The dashboard includes:
 
-### Store Overview
+**Store Overview**
+- Total visitors
+- Average dwell time
+- Zone activity
+- Estimated demographic distribution
 
-Displays high-level KPIs such as:
+**Analytics Charts**
+- Visitor distribution
+- Dwell times
+- Zone activity
+- Demographic estimates
 
-* Total visitors
-* Average dwell time
-* Zone activity
-* Demographic distribution
+**Heatmap**
+- Displays `heatmap_output.png` for spatial movement analysis.
 
-### Analytics Charts
+**Event Logs**
+- Displays individual visitor events in a detailed table.
 
-Interactive charts visualize:
-
-* Visitor distribution
-* Dwell times
-* Zone activity
-* Demographic information
-
-### Heatmap
-
-Displays the generated:
-
-```text
-heatmap_output.png
-```
-
-for spatial movement analysis.
-
-### Event Logs
-
-Provides a detailed table containing individual visitor events.
-
-### CSV Export
-
-Processed event data can be exported for further analysis.
+**CSV Export**
+- Allows processed event data to be exported for further analysis.
 
 ---
 
-# 📊 Dashboard Features
+## 📊 Dashboard Features
 
-## 1. Store Analytics Overview
+### 1. Store Analytics Overview
 
 Provides an executive-level summary of store activity.
 
 Key metrics include:
 
-```text
-Total Visitors
-Average Dwell Time
-Zone Activity
-Gender Distribution
-Age Distribution
-```
+- Total visitors
+- Average dwell time
+- Zone activity
+- Estimated gender distribution
+- Estimated age distribution
 
----
+### 2. AI Retail Copilot
 
-## 2. AI Retail Copilot
-
-Automatically identifies potential operational issues and provides recommendations.
+Identifies potential operational issues and provides recommendations.
 
 Example:
 
@@ -388,31 +326,27 @@ Suggested action:
 Increase checkout capacity during peak hours.
 ```
 
----
-
-## 3. Spatial Foot-Traffic Heatmap
+### 3. Spatial Foot-Traffic Heatmap
 
 Visualizes visitor movement throughout the store.
 
 This can help identify:
 
-* Customer hotspots
-* Low-traffic areas
-* Congested areas
-* Product placement opportunities
-* Store layout optimization opportunities
+- Customer hotspots
+- Low-traffic areas
+- Congested areas
+- Product-placement opportunities
+- Store-layout optimization opportunities
 
----
-
-## 4. Demographic & Dwell Analysis
+### 4. Demographic & Dwell Analysis
 
 Provides analytics based on visitor sessions.
 
 Example:
 
 ```text
-Gender Distribution
--------------------
+Estimated Gender Distribution
+-----------------------------
 Male       52%
 Female     48%
 
@@ -422,64 +356,100 @@ Shelf Area       21.4 sec
 Checkout         34.7 sec
 ```
 
----
+These demographic values are estimates produced by the classification model.
 
-## 5. Raw Event Logs
+### 5. Raw Event Logs
 
 Provides access to individual tracking events.
 
-Example:
-
-| Track ID | Zone     | Gender | Age Group   | Dwell |
-| -------: | -------- | ------ | ----------- | ----: |
-|        1 | Shelf    | Male   | Adult       | 18.2s |
-|        2 | Checkout | Female | Adult       | 35.4s |
-|        3 | Shelf    | Male   | Young Adult | 12.7s |
+| Track ID | Zone | Gender (estimated) | Age group (estimated) | Dwell |
+|---:|---|---|---|---:|
+| 1 | Shelf | Male | Adult | 18.2s |
+| 2 | Checkout | Female | Adult | 35.4s |
+| 3 | Shelf | Male | Young Adult | 12.7s |
 
 The data can also be exported as CSV for additional analysis.
 
 ---
 
-# ✨ Key Features
+## ✨ Key Features
 
-* 🎯 **Real-Time Person Detection** using YOLOv8
-* 🧭 **Multi-Object Tracking** using DeepSORT
-* 📍 **Zone / ROI Detection**
-* ⏱️ **Visitor Dwell-Time Analytics**
-* 🧑 **Estimated Demographic Classification**
-* 🗺️ **2D Foot-Traffic Heatmaps**
-* 🗄️ **SQLite Event Storage**
-* ⚡ **FastAPI REST Backend**
-* 📊 **Interactive Streamlit Dashboard**
-* 🤖 **AI Retail Copilot**
-* 📄 **Automated PDF Reporting**
-* 📥 **CSV Event Export**
-* 🔌 **Decoupled Computer Vision & Dashboard Architecture**
-
----
-
-# 🛠️ Technology Stack
-
-| Category             | Technology                 |
-| -------------------- | -------------------------- |
-| Programming Language | Python                     |
-| Computer Vision      | OpenCV                     |
-| Object Detection     | Ultralytics YOLOv8         |
-| Object Tracking      | DeepSORT                   |
-| Numerical Processing | NumPy                      |
-| Data Analysis        | Pandas                     |
-| Backend              | FastAPI                    |
-| API Server           | Uvicorn                    |
-| ORM                  | SQLAlchemy                 |
-| Database             | SQLite                     |
-| Dashboard            | Streamlit                  |
-| Visualization        | Plotly Express             |
-| Reporting            | ReportLab                  |
-| Environment          | Python Virtual Environment |
+- 🎯 Real-time person detection using YOLOv8
+- 🧭 Multi-object tracking using DeepSORT
+- 📍 Zone / ROI detection
+- ⏱️ Visitor dwell-time analytics
+- 🧑 Estimated demographic classification
+- 🗺️ 2D foot-traffic heatmaps
+- 🗄️ SQLite event storage
+- ⚡ FastAPI REST backend
+- 📊 Interactive Streamlit dashboard
+- 🤖 Rule-based AI Retail Copilot
+- 📄 Automated PDF reporting
+- 📥 CSV event export
+- 🔌 Decoupled computer-vision and dashboard architecture
 
 ---
 
-# 📁 Project Structure
+## 🛠️ Technology Stack
+
+| Category | Technology |
+|---|---|
+| Programming Language | Python |
+| Computer Vision | OpenCV |
+| Object Detection | Ultralytics YOLOv8 |
+| Object Tracking | DeepSORT |
+| Numerical Processing | NumPy |
+| Data Analysis | Pandas |
+| Backend | FastAPI |
+| API Server | Uvicorn |
+| ORM | SQLAlchemy |
+| Database | SQLite |
+| Dashboard | Streamlit |
+| Visualization | Plotly Express |
+| Reporting | ReportLab |
+| Environment | Python Virtual Environment |
+
+---
+
+## 💻 Hardware Requirements & Edge Setup
+
+Because the system runs YOLOv8 object detection, DeepSORT tracking, and demographic classification, hardware selection can directly affect inference frame rate (FPS) and real-time responsiveness.
+
+### 1. Compute Specifications
+
+| Component | Minimum (Offline/Demo Mode) | Recommended (Real-Time/Multi-Stream) |
+|---|---|---|
+| CPU | 4-Core Intel Core i5 / AMD Ryzen 5 | 8-Core+ Intel Core i7/i9 / AMD Ryzen 7/9 |
+| GPU | Integrated Graphics (CPU Inference) | NVIDIA GPU with CUDA support, such as RTX 3060 with 6GB+ VRAM |
+| RAM | 8 GB | 16–32 GB |
+| Storage | 10 GB free, SSD recommended | 50 GB+ NVMe SSD |
+| OS | Windows 10/11, Ubuntu 20.04+, macOS | Ubuntu 22.04 LTS or Windows 11 for supported CUDA setups |
+
+Actual requirements depend on video resolution, number of camera streams, model sizes, and target FPS.
+
+### 2. Camera & Sensor Hardware
+
+For live in-store deployment:
+
+- **IP/CCTV Cameras:** 1080p Full HD at approximately 30 FPS, supporting RTSP or ONVIF-compatible streaming.
+- **USB Webcams:** Standard 720p/1080p UVC-compliant cameras for local testing.
+- **Mounting and Placement:** An overhead or elevated angled mount can reduce shopper occlusion and improve floor-position estimates used for ROI and heatmap mapping.
+
+A suggested starting point is 2.5–3.5 metres high with a 30°–45° downward angle. The final setup should be calibrated to the store layout.
+
+### 3. Edge AI Deployment Targets
+
+The lightweight architecture (for example, YOLOv8n/YOLOv8s with SQLite) can be adapted to run on compact edge-compute nodes inside a retail store.
+
+Potential deployment targets:
+
+- **NVIDIA Jetson Orin Nano / Jetson Xavier NX:** Potential options for edge inference, depending on model size, stream count, and optimization.
+- **Industrial Mini PCs:** Systems such as Intel NUC-class devices or mini PCs with a suitable NVIDIA GPU can host the CV pipeline, FastAPI, and dashboard.
+- **Network Infrastructure:** Gigabit Ethernet and a PoE switch are useful for IP-camera deployments requiring reliable, low-latency RTSP ingestion.
+
+---
+
+## 📁 Project Structure
 
 ```text
 retail-intelligence-system/
@@ -504,66 +474,65 @@ retail-intelligence-system/
 
 ### File Responsibilities
 
-| File                 | Responsibility                                                               |
-| -------------------- | ---------------------------------------------------------------------------- |
-| `main_pipeline.py`   | Video processing, YOLOv8 detection, DeepSORT tracking and heatmap generation |
-| `database.py`        | SQLite database schema and SQLAlchemy event logging                          |
-| `api.py`             | FastAPI application and REST endpoints                                       |
-| `ai_copilot.py`      | Retail operational analysis and recommendations                              |
-| `dashboard.py`       | Streamlit executive dashboard                                                |
-| `generate_report.py` | Generates executive PDF reports                                              |
-| `store_video.mp4`    | Input video source                                                           |
-| `retail_data.db`     | Generated event database                                                     |
-| `heatmap_output.png` | Generated visitor movement heatmap                                           |
+| File | Responsibility |
+|---|---|
+| `main_pipeline.py` | Video processing, YOLOv8 detection, DeepSORT tracking, analytics, and heatmap generation |
+| `database.py` | SQLite database schema and SQLAlchemy event logging |
+| `api.py` | FastAPI application and REST endpoints |
+| `ai_copilot.py` | Retail operational analysis and recommendations |
+| `dashboard.py` | Streamlit executive dashboard |
+| `generate_report.py` | Generates executive PDF reports |
+| `store_video.mp4` | Input video source |
+| `retail_data.db` | Generated event database |
+| `heatmap_output.png` | Generated visitor-movement heatmap |
 
 ---
 
-# 🚀 Quick Start
+## 🚀 Quick Start
 
-## 1. Clone the Repository
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/suryanshvaish1/retail-intelligence-system.git
+
 cd retail-intelligence-system
 ```
 
----
+### 2. Create a Virtual Environment
 
-## 2. Create a Virtual Environment
-
-### Windows PowerShell
+**Windows PowerShell**
 
 ```powershell
 python -m venv venv
+
 .\venv\Scripts\Activate.ps1
 ```
 
-### Linux / macOS
+**Linux / macOS**
 
 ```bash
 python3 -m venv venv
+
 source venv/bin/activate
 ```
 
----
-
-## 3. Install Dependencies
+### 3. Install Dependencies
 
 ```bash
 python -m pip install ultralytics deep-sort-realtime opencv-python fastapi uvicorn sqlalchemy streamlit plotly requests reportlab pandas
 ```
 
----
-
-# ▶️ Running the System
-
-The system consists of three primary processes.
-
-Open **three separate terminals**.
+For NVIDIA GPU acceleration, install a CUDA-enabled PyTorch build compatible with your CUDA environment and the installed Ultralytics version.
 
 ---
 
-## Terminal 1 — Computer Vision Pipeline
+## ▶️ Running the System
+
+The system uses three primary processes.
+
+Open three separate terminals and activate the virtual environment in each one.
+
+### Terminal 1 — Computer Vision Pipeline
 
 Run the AI processing pipeline:
 
@@ -589,9 +558,7 @@ retail_data.db
 heatmap_output.png
 ```
 
----
-
-## Terminal 2 — FastAPI Backend
+### Terminal 2 — FastAPI Backend
 
 Start the REST API:
 
@@ -601,19 +568,10 @@ uvicorn api:app --reload --port 8000
 
 The API will be available at:
 
-```text
-http://127.0.0.1:8000
-```
+- Base API: `http://127.0.0.1:8000`
+- Interactive Swagger Documentation: `http://127.0.0.1:8000/docs`
 
-Interactive Swagger documentation:
-
-```text
-http://127.0.0.1:8000/docs
-```
-
----
-
-## Terminal 3 — Streamlit Dashboard
+### Terminal 3 — Streamlit Dashboard
 
 Start the dashboard:
 
@@ -623,13 +581,11 @@ streamlit run dashboard.py
 
 The dashboard will normally be available at:
 
-```text
-http://localhost:8501
-```
+`http://localhost:8501`
 
 ---
 
-# 📄 Generate Executive PDF Report
+## 📄 Generate Executive PDF Report
 
 After processing the video and generating database records, run:
 
@@ -641,23 +597,21 @@ This generates an executive-style PDF report containing summarized retail analyt
 
 ---
 
-# 📡 REST API Reference
+## 📡 REST API Reference
 
-| Endpoint       | Method | Description                               |
-| -------------- | ------ | ----------------------------------------- |
-| `/`            | `GET`  | API health check and endpoint information |
-| `/docs`        | `GET`  | Interactive Swagger/OpenAPI documentation |
-| `/api/summary` | `GET`  | Aggregated store KPIs                     |
-| `/api/events`  | `GET`  | Recorded visitor events                   |
-| `/api/copilot` | `GET`  | AI-generated operational recommendations  |
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | API health check and endpoint information |
+| `/docs` | GET | Interactive Swagger/OpenAPI documentation |
+| `/api/summary` | GET | Aggregated store KPIs |
+| `/api/events` | GET | Recorded visitor events |
+| `/api/copilot` | GET | Operational recommendations |
 
----
-
-## `/api/summary`
+### `GET /api/summary`
 
 Returns aggregated store analytics.
 
-Example:
+Example response:
 
 ```json
 {
@@ -668,13 +622,11 @@ Example:
 }
 ```
 
----
-
-## `/api/events`
+### `GET /api/events`
 
 Returns individual visitor event records.
 
-Example:
+Example response:
 
 ```json
 [
@@ -688,13 +640,11 @@ Example:
 ]
 ```
 
----
-
-## `/api/copilot`
+### `GET /api/copilot`
 
 Returns operational recommendations generated from store analytics.
 
-Example:
+Example response:
 
 ```json
 {
@@ -707,54 +657,50 @@ Example:
 
 ---
 
-# 🔄 End-to-End Data Flow
-
-The complete processing flow can be summarized as:
+## 🔄 End-to-End Data Flow
 
 ```text
-                CCTV / Video
-                     │
-                     ▼
-              OpenCV Frame Reader
-                     │
-                     ▼
-               YOLOv8 Detection
-                     │
-                     ▼
-                DeepSORT
-                     │
-          ┌──────────┴──────────┐
-          ▼                     ▼
-   Visitor Analytics        Movement Data
-          │                     │
-   ┌──────┼──────┐              ▼
-   ▼      ▼      ▼          Heatmap Engine
-  Zone  Dwell  Demographic      │
-   │      │      │              ▼
-   └──────┴──────┘        heatmap_output.png
-          │
-          ▼
-      SQLite DB
-          │
-          ▼
-      FastAPI API
-          │
-          ▼
-   Streamlit Dashboard
-          │
-          ▼
-   Executive Insights
+                  CCTV / Video
+                       │
+                       ▼
+               OpenCV Frame Reader
+                       │
+                       ▼
+                 YOLOv8 Detection
+                       │
+                       ▼
+                    DeepSORT
+                       │
+             ┌─────────┴─────────┐
+             ▼                   ▼
+      Visitor Analytics     Movement Data
+             │                   │
+       ┌─────┼─────┐             ▼
+       ▼     ▼     ▼       Heatmap Engine
+      Zone  Dwell  Demographic  │
+       │     │     │             ▼
+       └─────┴─────┘      heatmap_output.png
+             │
+             ▼
+          SQLite DB
+             │
+             ▼
+         FastAPI API
+             │
+             ▼
+      Streamlit Dashboard
+             │
+             ▼
+       Executive Insights
 ```
 
 ---
 
-# 🎯 Business Use Cases
-
-The platform can support several retail intelligence use cases.
+## 🎯 Business Use Cases
 
 ### Store Layout Optimization
 
-Identify areas receiving high or low customer traffic and optimize product placement accordingly.
+Identify areas receiving high or low customer traffic and use those patterns to inform product placement and store-layout decisions.
 
 ### Customer Engagement
 
@@ -774,7 +720,7 @@ Compare visitor activity around different store zones.
 
 ### Customer Journey Analysis
 
-Understand how visitors move through different areas of a store.
+Analyze movement between different store areas using tracked visitor trajectories.
 
 ### Executive Reporting
 
@@ -782,49 +728,52 @@ Generate summarized analytics and reports for store managers and business stakeh
 
 ---
 
-# 🔐 Privacy & Responsible AI
+## 🔐 Privacy & Responsible AI
 
-This project is intended as a **technical retail analytics prototype**.
+This project is intended as a technical retail-analytics prototype.
 
 The demographic classification component produces model-based estimates and should not be considered verified personal information.
 
-For production deployments, additional considerations should be implemented, including:
+For production deployments, additional considerations should be implemented:
 
-* Appropriate customer consent and notification
-* Applicable privacy regulations
-* Secure data storage
-* Data retention policies
-* Access control
-* Model accuracy evaluation
-* Bias and fairness evaluation
-* Appropriate handling of CCTV footage
+- Appropriate customer consent and notification
+- Compliance with applicable privacy regulations
+- Secure data storage and transmission
+- Data-retention and deletion policies
+- Role-based access control
+- Model-accuracy evaluation
+- Bias and fairness evaluation
+- Appropriate handling of CCTV footage
+- Clear policies for access to and use of analytics
+
+Where possible, production deployments should minimize the retention of identifiable video and use aggregated analytics for reporting.
 
 ---
 
-# 📈 Future Improvements
+## 📈 Future Improvements
 
 Potential improvements include:
 
-* 🔴 Live CCTV/IP camera streaming
-* 🧠 More advanced customer behavior analysis
-* 📦 Product detection and shelf monitoring
-* 🛍️ Product-level interaction tracking
-* 🚨 Real-time anomaly detection
-* 📱 Mobile analytics dashboard
-* ☁️ Cloud-based deployment
-* 🔔 Real-time alerts through Slack/email
-* 🧠 LLM-powered retail analytics
-* 📊 Historical trend analysis
-* 👥 Customer journey visualization
-* ⚡ GPU acceleration
-* 🔄 Real-time streaming analytics
-* 🏬 Multi-store analytics
+- 🔴 Live CCTV/IP camera streaming
+- 🧠 More advanced customer-behavior analysis
+- 📦 Product detection and shelf monitoring
+- 🛍️ Product-level interaction tracking
+- 🚨 Real-time anomaly detection
+- 📱 Mobile analytics dashboard
+- ☁️ Cloud-based deployment
+- 🔔 Real-time alerts through Slack/email
+- 🧠 LLM-powered retail analytics
+- 📊 Historical trend analysis
+- 👥 Customer-journey visualization
+- ⚡ TensorRT / ONNX edge-GPU optimization
+- 🔄 Real-time streaming analytics
+- 🏬 Multi-store analytics
 
 ---
 
-# 🧪 Example Analytics Pipeline
+## 🧪 Example Analytics Pipeline
 
-A typical visitor session can look like:
+A typical visitor session can look like this:
 
 ```text
 Visitor enters store
@@ -849,50 +798,47 @@ FastAPI exposes analytics
         ↓
 Streamlit displays metrics
         ↓
-AI Copilot generates operational insight
+Retail Copilot generates operational insight
 ```
 
 ---
 
-# 📊 Project Output
+## 📊 Project Output
 
 After successfully running the pipeline, the system produces:
 
 ```text
 retail_data.db
-        │
-        ├── Visitor Events
-        ├── Zone Analytics
-        ├── Dwell Times
-        └── Demographic Telemetry
+    │
+    ├── Visitor Events
+    ├── Zone Analytics
+    ├── Dwell Times
+    └── Demographic Telemetry
 
 heatmap_output.png
-        │
-        └── Visitor Foot-Traffic Visualization
+    │
+    └── Visitor Foot-Traffic Visualization
 ```
 
-The dashboard then combines these outputs into an executive retail intelligence interface.
+The dashboard combines these outputs into an executive retail-intelligence interface.
 
 ---
 
-# 📜 License
+## 📜 License
 
-This project is licensed under the **MIT License**.
+This project is licensed under the MIT License.
 
 ---
 
-# 👨‍💻 Author
+## 👨‍💻 Author
 
 **Suryansh Vaish**
 
-GitHub:
-https://github.com/suryanshvaish1
-
-Repository:
-https://github.com/suryanshvaish1/retail-intelligence-system
+- GitHub: [suryanshvaish1](https://github.com/suryanshvaish1)
+- Repository: [retail-intelligence-system](https://github.com/suryanshvaish1/retail-intelligence-system)
+- Demo Video: [Watch on OneDrive](https://1drv.ms/v/c/8db0741b659a15e5/IQBv2A0uQMopRphrxK-tGT2NAcsuJP_YEkLUymK3AzJpt6I?e=eYqY8s)
 
 ---
-drive link-https://1drv.ms/v/c/8db0741b659a15e5/IQBv2A0uQMopRphrxK-tGT2NAcsuJP_YEkLUymK3AzJpt6I?e=eYqY8s
 
 ## ⭐ If You Find This Project Useful
 
